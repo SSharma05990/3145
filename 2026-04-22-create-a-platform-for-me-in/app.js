@@ -1127,14 +1127,16 @@ function renderTablet() {
           <button class="tablet-action-btn use" data-type="consumed" data-adjust="0.5" data-id="${item.id}">Use 1/2</button>
           <button class="tablet-action-btn use" data-type="consumed" data-adjust="0.25" data-id="${item.id}">Use 1/4</button>
           <button class="tablet-action-btn use" data-type="consumed" data-adjust="0.3333" data-id="${item.id}">Use 1/3</button>
-          <button class="tablet-action-btn add" data-order-item="${item.id}" data-order-qty="1">Add 1</button>
+          <button class="tablet-action-btn add" data-type="restocked" data-adjust="1" data-id="${item.id}">${getTabletAddLabel(item, 1)}</button>
+          <button class="tablet-action-btn add" data-type="restocked" data-adjust="0.5" data-id="${item.id}">${getTabletAddLabel(item, 0.5)}</button>
           <button class="tablet-action-btn waste" data-type="wasted" data-adjust="1" data-id="${item.id}">Waste 1</button>
         </div>
         <div class="tablet-custom-row">
           <input class="tablet-custom-input" type="number" step="0.01" min="0" placeholder="Custom qty" data-custom-qty="${item.id}">
           <button class="tablet-secondary-btn" data-custom-action="consumed" data-custom-id="${item.id}">Use Custom</button>
           <button class="tablet-secondary-btn" data-custom-action="wasted" data-custom-id="${item.id}">Waste Custom</button>
-          <button class="tablet-secondary-btn" data-custom-order="${item.id}">Add Custom</button>
+          <button class="tablet-secondary-btn" data-custom-action="restocked" data-custom-id="${item.id}">Add Custom</button>
+          <button class="tablet-secondary-btn" data-custom-order="${item.id}">Order Custom</button>
         </div>
         <button class="tablet-undo-btn" data-undo-previous="${item.id}">Undo Previous</button>
       </article>
@@ -1405,11 +1407,13 @@ function recordInventoryMovement(itemId, delta, type = "consumed") {
   }
 
   const inventoryDelta = computeInventoryDelta(item, delta);
-  if (delta > 0 && item.onHand < inventoryDelta) {
+  if (type !== "restocked" && delta > 0 && item.onHand < inventoryDelta) {
     return;
   }
 
-  item.onHand = Math.max(0, item.onHand - inventoryDelta);
+  item.onHand = type === "restocked"
+    ? item.onHand + inventoryDelta
+    : Math.max(0, item.onHand - inventoryDelta);
   state.entries.push({
     id: crypto.randomUUID(),
     itemId,
@@ -1434,7 +1438,10 @@ function undoEntry(entryId) {
   const entry = state.entries[entryIndex];
   const item = state.items.find((candidate) => candidate.id === entry.itemId);
   if (item) {
-    item.onHand += getInventoryDelta(entry);
+    const inventoryDelta = getInventoryDelta(entry);
+    item.onHand = entry.type === "restocked"
+      ? Math.max(0, item.onHand - inventoryDelta)
+      : item.onHand + inventoryDelta;
     upsertItemRemote(item);
   }
 
@@ -2405,6 +2412,13 @@ function getPriceBasisLabel(priceBasis) {
 function formatSignedEntry(entry, item) {
   const label = ["white_box", "bucket", "box"].includes(item.unitType) && item.piecesPerBox > 0 ? "pcs" : item.unit;
   return `${formatSignedNumber(entry.delta)} ${label}`;
+}
+
+function getTabletAddLabel(item, amount) {
+  if (["white_box", "bucket", "box"].includes(item.unitType)) {
+    return `Add ${formatNumber(amount)} ${item.unit}`;
+  }
+  return `Add ${formatNumber(amount)}`;
 }
 
 function getDefaultUseAmount(item) {
