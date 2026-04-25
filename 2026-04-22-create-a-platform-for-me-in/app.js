@@ -336,7 +336,7 @@ function applyRoleNavigation() {
     openView("tablet");
     return;
   }
-  openView(currentTarget && currentTarget !== "tablet" ? currentTarget : "overview");
+  openView(currentTarget || "overview");
 }
 
 function renderAccess() {
@@ -1406,7 +1406,7 @@ function recordInventoryMovement(itemId, delta, type = "consumed") {
     return;
   }
 
-  const inventoryDelta = computeInventoryDelta(item, delta);
+  const inventoryDelta = computeInventoryDeltaByType(item, delta, type);
   if (type !== "restocked" && delta > 0 && item.onHand < inventoryDelta) {
     return;
   }
@@ -2361,6 +2361,13 @@ function computeInventoryDelta(item, delta) {
     return delta / item.piecesPerBox;
   }
   return delta;
+}
+
+function computeInventoryDeltaByType(item, delta, type) {
+  if (type === "restocked") {
+    return delta;
+  }
+  return computeInventoryDelta(item, delta);
 }
 
 function getInventoryDelta(entry) {
