@@ -434,6 +434,7 @@ async function handleLogout() {
   }
   unsubscribeFromRemoteChanges();
   state.access = normalizeAccess();
+  state.activeView = "overview";
   document.body.classList.remove("tablet-mode");
   saveState();
   renderApp();
