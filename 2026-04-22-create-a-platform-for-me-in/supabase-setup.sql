@@ -52,7 +52,7 @@ create table if not exists public.inventory_entries (
   item_id uuid not null references public.items(id) on delete cascade,
   delta numeric not null,
   inventory_delta numeric not null,
-  type text not null check (type in ('consumed', 'wasted')),
+  type text not null check (type in ('consumed', 'wasted', 'restocked')),
   business_day date not null,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
