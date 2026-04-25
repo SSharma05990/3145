@@ -189,7 +189,8 @@ function loadState() {
         daySnapshots: Array.isArray(parsed.daySnapshots) ? parsed.daySnapshots : [],
         currentDayContext: parsed.currentDayContext || defaultDayContext(),
         forecastOverrides: Array.isArray(parsed.forecastOverrides) ? parsed.forecastOverrides : [],
-        access: normalizeAccess(parsed.access)
+        access: normalizeAccess(parsed.access),
+        activeView: parsed.activeView || "overview"
       };
     }
   } catch (error) {
@@ -206,7 +207,8 @@ function loadState() {
     daySnapshots: [],
     currentDayContext: defaultDayContext(),
     forecastOverrides: [],
-    access: normalizeAccess()
+    access: normalizeAccess(),
+    activeView: "overview"
   };
 }
 
@@ -221,7 +223,8 @@ function saveState() {
     daySnapshots: state.daySnapshots,
     currentDayContext: state.currentDayContext,
     forecastOverrides: state.forecastOverrides,
-    access: state.access
+    access: state.access,
+    activeView: state.activeView
   }));
 }
 
@@ -331,12 +334,11 @@ function logoutUser() {
 }
 
 function applyRoleNavigation() {
-  const currentTarget = getActiveViewTarget();
   if (isEmployee()) {
     openView("tablet");
     return;
   }
-  openView(currentTarget || "overview");
+  openView(state.activeView || "overview");
 }
 
 function renderAccess() {
@@ -449,6 +451,7 @@ async function syncAccessFromSession(session) {
 }
 
 function openView(target) {
+  state.activeView = target;
   document.body.classList.toggle("tablet-mode", target === "tablet");
   refs.navLinks.forEach((link) => link.classList.toggle("active", link.dataset.target === target));
   refs.views.forEach((view) => view.classList.toggle("active", view.id === target));
@@ -1400,7 +1403,7 @@ function getMetrics() {
   };
 }
 
-function recordInventoryMovement(itemId, delta, type = "consumed") {
+async function recordInventoryMovement(itemId, delta, type = "consumed") {
   const item = state.items.find((entry) => entry.id === itemId);
   if (!item || delta === 0) {
     return;
@@ -1414,7 +1417,7 @@ function recordInventoryMovement(itemId, delta, type = "consumed") {
   item.onHand = type === "restocked"
     ? item.onHand + inventoryDelta
     : Math.max(0, item.onHand - inventoryDelta);
-  state.entries.push({
+  const newEntry = {
     id: crypto.randomUUID(),
     itemId,
     delta,
@@ -1422,14 +1425,19 @@ function recordInventoryMovement(itemId, delta, type = "consumed") {
     type,
     date: getBusinessDay(),
     timestamp: new Date().toISOString()
-  });
+  };
+  state.entries.push(newEntry);
   saveState();
-  insertEntryRemote(state.entries[state.entries.length - 1]);
-  upsertItemRemote(item);
   renderApp();
+
+  if (supabaseClient && isAuthenticated()) {
+    await upsertItemRemote(item);
+    await insertEntryRemote(newEntry);
+    queueRemoteRefresh();
+  }
 }
 
-function undoEntry(entryId) {
+async function undoEntry(entryId) {
   const entryIndex = state.entries.findIndex((entry) => entry.id === entryId);
   if (entryIndex === -1) {
     return;
@@ -1447,8 +1455,13 @@ function undoEntry(entryId) {
 
   state.entries.splice(entryIndex, 1);
   saveState();
-  deleteEntryRemote(entry.id);
   renderApp();
+
+  if (supabaseClient && isAuthenticated()) {
+    await upsertItemRemote(item);
+    await deleteEntryRemote(entry.id);
+    queueRemoteRefresh();
+  }
 }
 
 function addToOrderQueue(itemId, qty, source) {
